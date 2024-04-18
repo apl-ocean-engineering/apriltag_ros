@@ -1,5 +1,6 @@
 #pragma once
 
+#include <functional>
 #include <apriltag/apriltag.h>
 #include <geometry_msgs/msg/transform_stamped.hpp>
 #include <unordered_map>
