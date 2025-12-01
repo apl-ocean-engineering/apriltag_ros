@@ -7,6 +7,7 @@
 #else
 #include <cv_bridge/cv_bridge.h>
 #endif
+#include <geometry_msgs/msg/pose_array.hpp>
 #include <image_transport/camera_subscriber.hpp>
 #include <image_transport/image_transport.hpp>
 #include <rclcpp/rclcpp.hpp>
@@ -86,6 +87,7 @@ private:
 
     const image_transport::CameraSubscriber sub_cam;
     const rclcpp::Publisher<apriltag_msgs::msg::AprilTagDetectionArray>::SharedPtr pub_detections;
+    const rclcpp::Publisher<geometry_msgs::msg::PoseArray>::SharedPtr pub_pose_array;
     tf2_ros::TransformBroadcaster tf_broadcaster;
 
     pose_estimation_f estimate_pose = nullptr;
@@ -111,6 +113,7 @@ AprilTagNode::AprilTagNode(const rclcpp::NodeOptions& options)
         declare_parameter("image_transport", "raw", descr({}, true)),
         qos_profiles.at(declare_parameter("qos_profile", "default", descr("qos profile to use. 'default', 'sensor_data' or 'system_default'", true))))),
     pub_detections(create_publisher<apriltag_msgs::msg::AprilTagDetectionArray>("detections", rclcpp::QoS(1))),
+    pub_pose_array(create_publisher<geometry_msgs::msg::PoseArray>("pose_array", rclcpp::QoS(1))),
     tf_broadcaster(this)
 {
     // read-only parameters
@@ -211,6 +214,8 @@ void AprilTagNode::onCamera(const sensor_msgs::msg::Image::ConstSharedPtr& msg_i
     msg_detections.header = msg_img->header;
 
     std::vector<geometry_msgs::msg::TransformStamped> tfs;
+    geometry_msgs::msg::PoseArray pose_array_msg;
+    pose_array_msg.header = msg_img->header;
 
     for(int i = 0; i < zarray_size(detections); i++) {
         apriltag_detection_t* det;
@@ -248,13 +253,25 @@ void AprilTagNode::onCamera(const sensor_msgs::msg::Image::ConstSharedPtr& msg_i
             const double size = tag_sizes.count(det->id) ? tag_sizes.at(det->id) : tag_edge_size;
             tf.transform = estimate_pose(det, intrinsics, size);
             tfs.push_back(tf);
+
+            // Convert transform to pose for PoseArray
+            geometry_msgs::msg::Pose pose;
+            pose.position.x = tf.transform.translation.x;
+            pose.position.y = tf.transform.translation.y;
+            pose.position.z = tf.transform.translation.z;
+            pose.orientation = tf.transform.rotation;
+            pose_array_msg.poses.push_back(pose);
         }
     }
 
     pub_detections->publish(msg_detections);
 
-    if(estimate_pose != nullptr)
+    if(estimate_pose != nullptr) {
         tf_broadcaster.sendTransform(tfs);
+        if(!pose_array_msg.poses.empty()) {
+            pub_pose_array->publish(pose_array_msg);
+        }
+    }
 
     apriltag_detections_destroy(detections);
 }
