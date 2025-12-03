@@ -19,6 +19,7 @@
 // apriltag
 #include "tag_functions.hpp"
 #include <apriltag.h>
+#include <docking_msgs/msg/apriltag_pose_stamped.hpp>
 
 
 #define IF(N, V) \
@@ -87,7 +88,7 @@ private:
 
     const image_transport::CameraSubscriber sub_cam;
     const rclcpp::Publisher<apriltag_msgs::msg::AprilTagDetectionArray>::SharedPtr pub_detections;
-    const rclcpp::Publisher<geometry_msgs::msg::PoseArray>::SharedPtr pub_pose_array;
+    const rclcpp::Publisher<docking_msgs::msg::ApriltagPoseStamped>::SharedPtr pub_apriltag_pose;
     tf2_ros::TransformBroadcaster tf_broadcaster;
 
     pose_estimation_f estimate_pose = nullptr;
@@ -113,7 +114,7 @@ AprilTagNode::AprilTagNode(const rclcpp::NodeOptions& options)
         declare_parameter("image_transport", "raw", descr({}, true)),
         qos_profiles.at(declare_parameter("qos_profile", "default", descr("qos profile to use. 'default', 'sensor_data' or 'system_default'", true))))),
     pub_detections(create_publisher<apriltag_msgs::msg::AprilTagDetectionArray>("detections", rclcpp::QoS(1))),
-    pub_pose_array(create_publisher<geometry_msgs::msg::PoseArray>("pose_array", rclcpp::QoS(1))),
+    pub_apriltag_pose(create_publisher<docking_msgs::msg::ApriltagPoseStamped>("apriltag_pose", rclcpp::QoS(1))),  // Changed
     tf_broadcaster(this)
 {
     // read-only parameters
@@ -266,11 +267,15 @@ void AprilTagNode::onCamera(const sensor_msgs::msg::Image::ConstSharedPtr& msg_i
 
     pub_detections->publish(msg_detections);
 
+    // Publish combined ApriltagPoseStamped message
     if(estimate_pose != nullptr) {
         tf_broadcaster.sendTransform(tfs);
-        if(!pose_array_msg.poses.empty()) {
-            pub_pose_array->publish(pose_array_msg);
-        }
+
+        docking_msgs::msg::ApriltagPoseStamped apriltag_pose_msg;
+        apriltag_pose_msg.header = msg_img->header;
+        apriltag_pose_msg.apriltags = msg_detections;
+        apriltag_pose_msg.posearray = pose_array_msg;
+        pub_apriltag_pose->publish(apriltag_pose_msg);
     }
 
     apriltag_detections_destroy(detections);

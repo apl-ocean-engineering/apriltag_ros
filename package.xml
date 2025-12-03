@@ -20,6 +20,7 @@
   <depend>image_transport</depend>
   <depend>cv_bridge</depend>
   <depend>geometry_msgs</depend>
+  <depend>docking_msgs</depend>
 
   <exec_depend>camera_ros</exec_depend>
   <exec_depend condition="$ROS_DISTRO != 'humble'">image_proc</exec_depend>
